@@ -13,6 +13,7 @@ import os
 import global_vars
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 import webbrowser
 from global_vars import base_dir,goodslist_path,config_path,tasklistpath
 
@@ -162,9 +163,7 @@ def create_task():
 #新建任务清单 starttask从任务清单里面读取
 @app.route('/add_to_tasklist', methods=['POST'])
 def add_to_tasklist():
-    
-
-    # 从请求中获取其他参数
+    # 从请求中获取参数（任务名已取消，序号由后端自动分配）
     commodityCode = str(request.json.get('commodityCode'))
     #address返回的是字符串，需要转换成字典
     address_str = request.json.get('address')
@@ -172,18 +171,18 @@ def add_to_tasklist():
     address = json.loads(address_str)
 
     time = request.json.get('task_time')
-    name = request.json.get('task_name')
     count = int(request.json.get('count'))
     gameId = int(request.json.get('gameId'))
+    offset_ms = int(request.json.get('offset_ms', 0) or 0)  # 兑换时间偏移（毫秒），0 是合法值不参与缺失校验
 
-    if not commodityCode or not address or not time or not name  or not count:
+    if not commodityCode or not address or not time or not count:
         log_message("Missing required parameters")
         return jsonify({'status': 'error', 'message': '请求数据缺失'}), 400
 
     try:
-        tools.add_to_tasklist(commodityCode,address,gameId,time,name,count)
+        name = tools.add_to_tasklist(commodityCode, address, gameId, time, count, offset_ms)
         log_message(f"Task added successfully: {name}")
-        return jsonify({'status': 'success', 'message': '已成功添加到任务清单'})
+        return jsonify({'status': 'success', 'message': '已成功添加到任务清单', 'task_name': name})
     except Exception as e:
         log_message(f"Error adding task: {e}")
         return jsonify({'status': 'error', 'message': f'添加任务时发生错误: {str(e)}'}), 500
@@ -196,12 +195,27 @@ def clear_tasklist():
     log_message("任务清单已经清空")
     return jsonify({"message": "任务清单已经清空"}), 200
 
+# 删除单个任务
+@app.route('/delete_task', methods=['POST'])
+def delete_task():
+    task_name = request.form.get('task_name')
+    if not task_name:
+        return jsonify({"error": "缺少任务名"}), 400
+    # 若任务正在运行，先停止调度循环并彻底移除实例
+    inst = task_instances.get(task_name)
+    if inst:
+        inst.task_running = False
+        del task_instances[task_name]
+    tools.delete_task(task_name)
+    log_message(f"任务已删除: {task_name}")
+    return jsonify({"message": f"任务 {task_name} 已删除"})
+
 #####################
 #开始任务#
 #####################
 
 @app.route('/start_task', methods=['GET', 'POST'])
-async def start_task():
+def start_task():
     try:
         with open(tasklistpath, 'r', encoding='utf-8') as f:
             tasks = json.load(f)
@@ -210,16 +224,25 @@ async def start_task():
         log_message(f"Error loading tasklist.json: {e}")
         return redirect(url_for('create_task', alert="请先创建任务清单"))
 
+    tasks.sort(key=tools.sort_key)  # 按序号升序展示
     return render_template('start_task.html', tasks=tasks, task_running=any(instance.task_running for instance in task_instances.values()))
 
 
 # 获取任务状态
 @app.route('/get_task_status', methods=['GET'])
 def get_task_status():
-    for task_instance in task_instances.values():
-        if task_instance.task_running:
-            return jsonify(task_running=True)
-    return jsonify(task_running=False)
+    result = []
+    for name, inst in task_instances.items():
+        result.append({
+            "name": name,
+            "running": inst.task_running,
+            "status": getattr(inst, "status", ""),
+            "target_time": inst.target_time.isoformat(),
+            "offset_ms": getattr(inst, "offset_ms", 0),
+            "remaining_seconds": getattr(inst, "remaining_seconds", None)
+        })
+    any_running = any(inst.task_running for inst in task_instances.values())
+    return jsonify(tasks=result, any_running=any_running)
 
 
 # 获取正在运行的任务
@@ -238,6 +261,40 @@ def run_asyncio_task(task_name, task_dict):
     loop.run_until_complete(task_instance.schedule_task())  # 调用类的方法
     loop.close()
 
+
+def autostart_tasks():
+    """
+    程序启动时自动后台调度任务清单中所有未过期任务，使兑换不依赖任何界面操作。
+    已过期(目标时间早于当前)的任务跳过，避免重启时被立即触发。
+    """
+    try:
+        with open(tasklistpath, 'r', encoding='utf-8') as f:
+            tasks = json.load(f)
+    except Exception as e:
+        log_message(f"自动调度读取任务清单失败: {e}")
+        return
+    now = datetime.now()
+    started = 0
+    for t in tasks:
+        name = t.get('name')
+        if not name or name in task_instances:
+            continue
+        try:
+            target = datetime.fromisoformat(t['time']) + timedelta(milliseconds=int(t.get('offset_ms', 0) or 0))
+        except Exception:
+            continue
+        if target <= now:
+            log_message(f"任务 {name} 目标时间已过({t.get('time')})，跳过自动调度")
+            continue
+        try:
+            t['count'] = int(t.get('count', 5))
+        except Exception:
+            t['count'] = 5
+        executor.submit(run_asyncio_task, name, t)
+        started += 1
+    if started:
+        log_message(f"已自动后台调度 {started} 个未过期任务")
+
 # 运行任务
 @app.route('/run_task', methods=['POST'])
 def run_task():
@@ -252,8 +309,9 @@ def run_task():
         if not task_name:
             return jsonify({"error": "Task name is missing"}), 400
 
-        # 检查任务是否已经在运行
-        if task_name in task_instances:
+        # 检查任务是否已经在运行（保留已终止实例以展示终态，仅运行中才拒绝重启）
+        existing = task_instances.get(task_name)
+        if existing and existing.task_running:
             return jsonify({"error": f"Task '{task_name}' is already running"}), 409
 
         count = selected_task.get('count', 5)  # 默认值为5，如果count不存在
@@ -292,7 +350,7 @@ def stop_task():
     task_instance = task_instances.get(task_name)
     if task_instance:
         task_instance.task_running = False
-        del task_instances[task_name]
+        task_instance.status = "已停止"  # 保留实例以反映终态，不再删除
         message = f"任务 {task_name} 已经停止"
         log_message(message)
         return jsonify(messages=message)
@@ -319,6 +377,11 @@ if __name__ == '__main__':
     except Exception as e:
         log_message(f"读取配置文件失败:{e}")
         global_vars.CorrectProfile= False
-    webbrowser.open('http://127.0.0.1:5001')
-    app.run(debug=True,port=5001)
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        autostart_tasks()
+    # 容器环境无浏览器，通过 IN_DOCKER 标记跳过自动打开
+    if not os.environ.get("IN_DOCKER"):
+        webbrowser.open('http://127.0.0.1:5001')
+    # host=0.0.0.0 让容器外部可访问；本地仍可用 127.0.0.1 访问
+    app.run(debug=True, host='0.0.0.0', port=5001)
     

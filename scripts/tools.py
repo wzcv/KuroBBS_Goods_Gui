@@ -72,14 +72,53 @@ def clear_tasklist():
         file.write('')
 
 
+def delete_task(name):
+    """
+    从任务清单中删除指定名称的任务，返回删除后的列表
+    """
+    try:
+        with open(tasklistpath, 'r', encoding='utf-8') as file:
+            tasklist = json.load(file)
+    except Exception:
+        tasklist = []
+    tasklist = [t for t in tasklist if t.get('name') != name]
+    with open(tasklistpath, 'w', encoding='utf-8') as file:
+        json.dump(tasklist, file, ensure_ascii=False, indent=4)
+    return tasklist
+
+
 def format_cookie_string(cookie):
     return '; '.join([f"{key}={value}" for key, value in cookie.items()])
 
 
 
-def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,name:str,count:int):
+def _seq_of(task):
+    """解析任务的整数序号；非数字(历史遗留名称)返回 None。"""
+    try:
+        return int(task.get('name'))
+    except (TypeError, ValueError):
+        return None
+
+
+def next_seq(tasklist):
+    """返回最小可用正整数序号：删除任务后其序号自动释放，可被后续新建复用。"""
+    used = {s for s in (_seq_of(t) for t in tasklist) if s is not None}
+    n = 1
+    while n in used:
+        n += 1
+    return n
+
+
+def sort_key(task):
+    """任务排序键：数字序号升序在前，非数字名称(历史遗留)排其后。"""
+    s = _seq_of(task)
+    return (0, s) if s is not None else (1, str(task.get('name', '')))
+
+
+def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,count:int,offset_ms:int=0):
     """
-    将任务添加到任务清单中
+    将任务添加到任务清单中，自动分配序号(name)并返回。
+    offset_ms: 兑换时间偏移（毫秒，负值=提早，正值=延迟）
     """
 
     payload = {
@@ -112,14 +151,6 @@ def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,name:str,
         "cookie": "user_token="+global_vars.token,
         "user-agent": "okhttp/3.11.0"
     }
-    #生成格式
-    task = {
-        "name": name,
-        "payload": payload,
-        "headers": headers,
-        "time": time,
-        "count":count
-    }
     try:
         with open(tasklistpath, 'r', encoding='utf-8') as file:
             tasklist = json.load(file)
@@ -127,12 +158,21 @@ def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,name:str,
         tasklist = []
         print(f"Failed to read tasklist.json: {str(e)}")
 
-    # Append the new task to the tasklist
+    # 取消用户自定义任务名：自动分配最小可用序号作为唯一标识
+    name = str(next_seq(tasklist))
+    task = {
+        "name": name,
+        "payload": payload,
+        "headers": headers,
+        "time": time,
+        "count": count,
+        "offset_ms": offset_ms
+    }
     tasklist.append(task)
 
     # Save the updated tasklist back to tasklist.json
     with open(tasklistpath, 'w', encoding='utf-8') as file:
         json.dump(tasklist, file, ensure_ascii=False, indent=4)
 
-    return tasklist
+    return name
 

@@ -1,9 +1,8 @@
 ddddocr==1.5.5
-Flask==3.0.3
-httpx==0.27.0
-loguru==0.7.2
+Flask==3.1.2
+httpx==0.28.1
+loguru==0.7.3
 ntplib==0.4.0
 PyExecJS==1.5.1
-Requests==2.32.3
-numpy==1.26.2
-
+requests==2.34.2
+numpy==2.4.6

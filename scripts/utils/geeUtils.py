@@ -1,5 +1,6 @@
 import json
 import urllib.parse
+import uuid
 
 import execjs
 import requests
@@ -21,14 +22,14 @@ with open(js_path, 'r') as f:
 def _convertCallBack(callBackSign:str, context:str):
     return json.loads(context[len(callBackSign) + 1: len(context) - 1])
 
-def geeLoad(callBackSign: str, captcha_id: str):
+def geeLoad(callBackSign: str, captcha_id: str, challenge: str):
     url = "https://gcaptcha4.geetest.com/load"
     params = {
-        "callback": callBackSign , 
+        "callback": callBackSign,
         "captcha_id": captcha_id,
-        "client_type": "web",
-        "pt": "1",
-        "lang": "zho"
+        "challenge": challenge,
+        "client_type": "android",
+        "lang": "zh"
     }
     response = requests.get(url, headers=headers, params=params)
     return _convertCallBack(callBackSign=callBackSign, context=response.text)
@@ -44,35 +45,39 @@ def geeSlideAnalyse(bgPath:str, slicePath:str):
 
     # Identify
     det = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
-    target = det.slide_match(target_bytes=targetBytes,background_bytes=bgBytes,simple_target=True)['target']
+    target = det.slide_match(target_bytes=targetBytes, background_bytes=bgBytes, simple_target=True)['target']
     distance = target[0]
     #logger.debug(f"Get target ==> {target}")
     sliceTime = trackUtils.GetSlideTrackTime(distance=distance)
     return {"distance": distance, "time":sliceTime}
 
-def geeSecCode(callBackSign:str, captcha_id:str):
-    geeLoadData = geeLoad(callBackSign=callBackSign, captcha_id=captcha_id)['data']
-    geeDetectInfo = geeSlideAnalyse(bgPath=geeLoadData['bg'], slicePath=geeLoadData['slice'])
-    #logger.debug(f'Detect GeeTest Slice ==> {geeDetectInfo}')
-    lotNumber = geeLoadData['lot_number']
-    w = execjs.compile(geeTestText).call("geeTestW",geeDetectInfo['distance'], geeDetectInfo['time'], lotNumber, geeLoadData['pow_detail']['datetime'], captcha_id)
-    #logger.debug(f'Get W ==> {w}')
-    url = "https://gcaptcha4.geetest.com/verify"
-    params = {
-        "callback": callBackSign,
-        "captcha_id": captcha_id,
-        "client_type": "web",
-        "lot_number": lotNumber,
-        "payload": geeLoadData['payload'],
-        "process_token": geeLoadData['process_token'],
-        "payload_protocol": "1",
-        "pt": "1",
-        "w":  w
-    }
-    response =requests.get(url=url, params=params, headers=headers)
-    responseJson = _convertCallBack(callBackSign=callBackSign, context=response.text)
-    result = responseJson['data']['result']
-    if result != "success":
-        logger.error("滑块请求失败,请重新尝试")
-        return None
-    return json.dumps(_convertCallBack(callBackSign=callBackSign, context=response.text)['data']['seccode'])
+def geeSecCode(callBackSign:str, captcha_id:str, max_retry:int=3):
+    ctx = execjs.compile(geeTestText)
+    for attempt in range(max_retry):
+        challenge = str(uuid.uuid4())  # load 与 verify 必须使用同一 challenge
+        try:
+            geeLoadData = geeLoad(callBackSign=callBackSign, captcha_id=captcha_id, challenge=challenge)['data']
+            geeDetectInfo = geeSlideAnalyse(bgPath=geeLoadData['bg'], slicePath=geeLoadData['slice'])
+            lotNumber = geeLoadData['lot_number']
+            w = ctx.call("geeTestW", geeDetectInfo['distance'], geeDetectInfo['time'], lotNumber, geeLoadData['pow_detail']['datetime'], captcha_id)
+            params = {
+                "callback": callBackSign,
+                "captcha_id": captcha_id,
+                "challenge": challenge,
+                "client_type": "android",
+                "lot_number": lotNumber,
+                "payload": geeLoadData['payload'],
+                "process_token": geeLoadData['process_token'],
+                "payload_protocol": "1",
+                "pt": "1",
+                "w": w
+            }
+            response = requests.get(url="https://gcaptcha4.geetest.com/verify", params=params, headers=headers)
+            responseJson = _convertCallBack(callBackSign=callBackSign, context=response.text)
+            if responseJson['data']['result'] == "success":
+                return json.dumps(responseJson['data']['seccode'])
+            logger.warning(f"第 {attempt+1}/{max_retry} 次滑块验证失败(distance={geeDetectInfo['distance']})，重试")
+        except Exception as e:
+            logger.warning(f"第 {attempt+1}/{max_retry} 次极验流程异常: {e}")
+    logger.error("滑块验证多次失败，请重试")
+    return None

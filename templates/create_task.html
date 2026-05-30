@@ -5,10 +5,6 @@
 <h2>新建任务</h2>
 <form method="POST" action="/create_task">
     <div class="form-group">
-        <label for="taskName">任务名称</label>
-        <input type="text" class="form-control" id="taskName" name="taskName" value="默认任务1">
-    </div>
-    <div class="form-group">
         <label for="address">地址</label>
         <select class="form-control" id="address" name="address">
             {% for address_info in addresses %}
@@ -32,7 +28,11 @@
         <label for="count">尝试兑换次数 建议3-10之间 默认为5</label>
         <input type="text" class="form-control" id="count" name="count" value=5>
     </div>
-    <button type="button" class="btn btn-primary" onclick="tasklist()">新建任务</button>
+    <div class="form-group">
+        <label for="offsetMs">时间偏移(毫秒) 负=提早 / 正=延迟（实际精度约毫秒级）</label>
+        <input type="number" class="form-control" id="offsetMs" name="offsetMs" value="0">
+    </div>
+    <button type="button" class="btn btn-primary" onclick="tasklist()">新建并启动任务</button>
     <button type="button" class="btn btn-danger" id="clear-tasklist" onclick="clear_tasklist()">清空任务列表</button>
 </form>
 
@@ -55,24 +55,46 @@ document.getElementById("productName").addEventListener("change", function() {
     updateTaskTime();
 });
 
-function tasklist() {
+async function tasklist() {
     const address = document.getElementById('address').value;
     const commodityCode = document.getElementById('productName').value;
     const task_time = document.getElementById('taskTime').value;
-    const task_name = document.getElementById('taskName').value;
     const gameId = document.querySelector('#productName option:checked').getAttribute('data-id');
     const count = document.getElementById('count').value;
-    console.log(gameId);
-    
-    fetch('/add_to_tasklist', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ address: address, commodityCode: commodityCode, task_time: task_time, task_name:task_name,gameId: gameId, count: count })
-    }).then(() => {
-        alert('任务创建成功');
-    });
+    const offset_ms = document.getElementById('offsetMs').value || 0;
+
+    try {
+        // 1) 创建任务（JSON 编码）；序号由后端自动分配并回传
+        const addRes = await fetch('/add_to_tasklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, commodityCode, task_time, gameId, count, offset_ms })
+        });
+        const addData = await addRes.json();
+        if (!addRes.ok || addData.status !== 'success') {
+            alert('任务创建失败: ' + (addData.message || addRes.status));
+            return;
+        }
+        const taskName = addData.task_name;  // 后端分配的序号
+
+        // 2) 创建成功后立即启动该任务（form 编码，run_task 读 form 的 task 字段）
+        const runRes = await fetch('/run_task', {
+            method: 'POST',
+            body: new URLSearchParams({ task: taskName })
+        });
+        if (!runRes.ok) {
+            const runData = await runRes.json().catch(() => ({}));
+            alert('任务已创建(序号 ' + taskName + ')，但启动失败: ' + (runData.error || runRes.status) + '，将跳转任务列表查看');
+        } else {
+            alert('任务已创建并启动，序号: ' + taskName);
+        }
+
+        // 3) 跳转任务列表查看实时状态
+        window.location.href = '/start_task';
+    } catch (err) {
+        console.error(err);
+        alert('请求出错: ' + err);
+    }
 }
 
 function updateTaskTime() {

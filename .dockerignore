@@ -1,0 +1,24 @@
+# 版本控制与 CI
+.git
+.github
+.gitignore
+
+# Python 缓存
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 敏感信息与运行时数据：绝不打进镜像
+config.json
+goodslist.json
+tasklist.json
+*.log
+
+# 文档与许可证
+docs
+README.md
+LICENSE
+
+# 抓包/调试产物
+*.har
