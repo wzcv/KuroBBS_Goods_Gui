@@ -4,7 +4,7 @@ import os
 # 定义基本目录和父目录路径
 base_dir = os.path.abspath(os.path.dirname(__file__))
 parent_dir = os.path.dirname(base_dir)
-log_path = os.path.join(parent_dir, 'log.log')
+log_path = os.environ.get('KURO_LOG_PATH', os.path.join(parent_dir, 'log.log'))
 
 def setup_logger(log_file=log_path):
     """设置自定义日志记录器"""
@@ -16,6 +16,7 @@ def setup_logger(log_file=log_path):
         formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
         # 文件处理程序，使用 UTF-8 编码写入文件
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
         file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

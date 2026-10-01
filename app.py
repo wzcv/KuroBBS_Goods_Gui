@@ -382,8 +382,24 @@ def stop_task():
 #####################
 #程序入口
 #####################
+def ensure_runtime_files():
+    os.makedirs(global_vars.data_dir, exist_ok=True)
+    defaults = {
+        goodslist_path: [],
+        tasklistpath: [],
+        config_path: {},
+    }
+    for path, value in defaults.items():
+        if not os.path.isfile(path):
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(value, f, ensure_ascii=False, indent=4)
+    if not os.path.isfile(global_vars.log_path):
+        open(global_vars.log_path, 'a', encoding='utf-8').close()
+
+
 if __name__ == '__main__':
-    setup_logger() 
+    ensure_runtime_files()
+    setup_logger(global_vars.log_path)
     # 检查 goodslist.json 是否存在，不存在则创建  不然会报错
     if not os.path.exists(goodslist_path):
         with open(goodslist_path, 'w') as f:
