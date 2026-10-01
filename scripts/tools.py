@@ -8,9 +8,6 @@ import socket
 # 获取当前文件的绝对路径
 base_dir = os.path.abspath(os.path.dirname(__file__))
 parent_dir = os.path.dirname(base_dir)
-goodslist_path = os.path.join(parent_dir, 'goodslist.json')
-config_path = os.path.join(parent_dir, 'config.json')
-tasklistpath = os.path.join(parent_dir, 'tasklist.json')
 
 
 
@@ -42,7 +39,7 @@ def add_to_wishlist(commodityCode, saleTime, commodityName, gameId):
     将商品添加到备选清单中
     """
     try:
-        with open(goodslist_path, 'r', encoding='utf-8') as f:
+        with open(global_vars.goodslist_path, 'r', encoding='utf-8') as f:
             goods_list = json.load(f)
             print(goods_list)
     except (FileNotFoundError, json.JSONDecodeError):
@@ -59,29 +56,29 @@ def add_to_wishlist(commodityCode, saleTime, commodityName, gameId):
     goods_list.append(new_item)
 
     # 写入goodslist.json文件
-    with open(goodslist_path, 'w', encoding='utf-8') as f:
+    with open(global_vars.goodslist_path, 'w', encoding='utf-8') as f:
         json.dump(goods_list, f, ensure_ascii=False, indent=4)
 
 
 def clear_goodslist():
-    with open(goodslist_path, 'w', encoding='utf-8') as file:
+    with open(global_vars.goodslist_path, 'w', encoding='utf-8') as file:
         json.dump([], file, ensure_ascii=False, indent=4)
 
 
 def delete_wishlist_item(commodityCode):
     """从备选清单中删除指定商品，返回删除后的列表。"""
     try:
-        with open(goodslist_path, 'r', encoding='utf-8') as file:
+        with open(global_vars.goodslist_path, 'r', encoding='utf-8') as file:
             goods_list = json.load(file)
     except Exception:
         goods_list = []
     goods_list = [item for item in goods_list if str(item.get('commodityCode')) != str(commodityCode)]
-    with open(goodslist_path, 'w', encoding='utf-8') as file:
+    with open(global_vars.goodslist_path, 'w', encoding='utf-8') as file:
         json.dump(goods_list, file, ensure_ascii=False, indent=4)
     return goods_list
 
 def clear_tasklist():
-    with open(tasklistpath, 'w', encoding='utf-8') as file:
+    with open(global_vars.tasklistpath, 'w', encoding='utf-8') as file:
         json.dump([], file, ensure_ascii=False, indent=4)
 
 
@@ -90,12 +87,12 @@ def delete_task(name):
     从任务清单中删除指定名称的任务，返回删除后的列表
     """
     try:
-        with open(tasklistpath, 'r', encoding='utf-8') as file:
+        with open(global_vars.tasklistpath, 'r', encoding='utf-8') as file:
             tasklist = json.load(file)
     except Exception:
         tasklist = []
     tasklist = [t for t in tasklist if t.get('name') != name]
-    with open(tasklistpath, 'w', encoding='utf-8') as file:
+    with open(global_vars.tasklistpath, 'w', encoding='utf-8') as file:
         json.dump(tasklist, file, ensure_ascii=False, indent=4)
     return tasklist
 
@@ -165,7 +162,7 @@ def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,count:int
         "user-agent": "okhttp/3.11.0"
     }
     try:
-        with open(tasklistpath, 'r', encoding='utf-8') as file:
+        with open(global_vars.tasklistpath, 'r', encoding='utf-8') as file:
             tasklist = json.load(file)
     except Exception as e:
         tasklist = []
@@ -184,7 +181,7 @@ def add_to_tasklist(commodityCode:str,address:dict,gameId:str,time:str,count:int
     tasklist.append(task)
 
     # Save the updated tasklist back to tasklist.json
-    with open(tasklistpath, 'w', encoding='utf-8') as file:
+    with open(global_vars.tasklistpath, 'w', encoding='utf-8') as file:
         json.dump(tasklist, file, ensure_ascii=False, indent=4)
 
     return name

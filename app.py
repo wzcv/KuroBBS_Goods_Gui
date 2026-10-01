@@ -15,7 +15,6 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import webbrowser
-from global_vars import base_dir,goodslist_path,config_path,tasklistpath
 
 tasks = {}
 executor = ThreadPoolExecutor(max_workers=10)
@@ -28,7 +27,7 @@ task_instances = {}# 存储正在运行的任务对象的字典
 
 def _read_goodslist():
     try:
-        with open(goodslist_path, 'r', encoding='utf-8') as f:
+        with open(global_vars.goodslist_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
         return []
@@ -138,7 +137,7 @@ def get_user_info():
             "distinct_id": distinct_id,
             "token": token
         }
-        with open(config_path, "w") as f:
+        with open(global_vars.config_path, "w") as f:
             json.dump(data, f)
         set_globalvars(data)
         global_vars.CorrectProfile= True
@@ -164,11 +163,11 @@ def create_task():
         addresses= details.get_address_by_accesstoken(global_vars.access_token)
         log_message(f"成功获取地址{addresses}")
         try:
-            with open(goodslist_path, 'r', encoding='utf-8') as f:
+            with open(global_vars.goodslist_path, 'r', encoding='utf-8') as f:
                 goods_list = json.load(f)
         except json.JSONDecodeError as e:
             # 处理JSON解码错误
-            log_message(f"Error decoding JSON from {goodslist_path}: {e}")
+            log_message(f"Error decoding JSON from {global_vars.goodslist_path}: {e}")
             goods_list = []
 
         #addresses.append({'id': "", 'uid': "", 'name': '', 'tel': '', 'province': '', 'city': '', 'district': '', 'fullAddress': '', 'isDefault': False, 'createTime': '', 'updateTime': '', 'area': None, 'areaCode': None, 'postCode': None})
@@ -237,7 +236,7 @@ def delete_task():
 @app.route('/start_task', methods=['GET', 'POST'])
 def start_task():
     try:
-        with open(tasklistpath, 'r', encoding='utf-8') as f:
+        with open(global_vars.tasklistpath, 'r', encoding='utf-8') as f:
             tasks = json.load(f)
             log_message("成功读取任务清单")
     except Exception as e:
@@ -288,7 +287,7 @@ def autostart_tasks():
     已过期(目标时间早于当前)的任务跳过，避免重启时被立即触发。
     """
     try:
-        with open(tasklistpath, 'r', encoding='utf-8') as f:
+        with open(global_vars.tasklistpath, 'r', encoding='utf-8') as f:
             tasks = json.load(f)
     except Exception as e:
         log_message(f"自动调度读取任务清单失败: {e}")
@@ -318,7 +317,7 @@ def autostart_tasks():
 # 运行任务
 @app.route('/run_task', methods=['POST'])
 def run_task():
-    with open(tasklistpath, 'r', encoding="utf-8") as f:
+    with open(global_vars.tasklistpath, 'r', encoding="utf-8") as f:
         tasks = json.load(f)
     selected_task_name = request.form.get('task')
     selected_task = next((task for task in tasks if task['name'] == selected_task_name), None)
@@ -385,9 +384,9 @@ def stop_task():
 def ensure_runtime_files():
     os.makedirs(global_vars.data_dir, exist_ok=True)
     defaults = {
-        goodslist_path: [],
-        tasklistpath: [],
-        config_path: {},
+        global_vars.goodslist_path: [],
+        global_vars.tasklistpath: [],
+        global_vars.config_path: {},
     }
     for path, value in defaults.items():
         if not os.path.isfile(path):
@@ -401,12 +400,12 @@ if __name__ == '__main__':
     ensure_runtime_files()
     setup_logger(global_vars.log_path)
     # 检查 goodslist.json 是否存在，不存在则创建  不然会报错
-    if not os.path.exists(goodslist_path):
-        with open(goodslist_path, 'w') as f:
+    if not os.path.exists(global_vars.goodslist_path):
+        with open(global_vars.goodslist_path, 'w') as f:
             json.dump([], f)  
-        log_message(f"goodlist不存在，已创建文件：{goodslist_path}")
+        log_message(f"goodlist不存在，已创建文件：{global_vars.goodslist_path}")
     try:
-        with open(config_path, "r") as f:
+        with open(global_vars.config_path, "r") as f:
             data = json.load(f)
             set_globalvars(data)
             global_vars.CorrectProfile= True
