@@ -66,8 +66,7 @@ def index():
 
 @app.route('/view_log')
 def view_log():
-    log_path = os.path.join(app.root_path, 'log.log')
-    return send_file(log_path, mimetype='text/plain')
+    return send_file(global_vars.log_path, mimetype='text/plain')
 
 #####################
 #获取商品列表
