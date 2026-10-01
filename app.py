@@ -26,6 +26,14 @@ task_instances = {}# 存储正在运行的任务对象的字典
 
 
 
+def _read_goodslist():
+    try:
+        with open(goodslist_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
 def set_globalvars(data):
     global_vars.token = data["token"]
     global_vars.devcode = data["devcode"]
@@ -78,8 +86,10 @@ def product_list_view():
         products_list = details.get_goods_list( selected_category,global_vars.headers)
         for products in products_list:
             products['saleTime'] = tools.convert_timestamp_to_string(products['saleTime'])
-        return render_template('product_list.html', products=products_list, gameId=global_vars.gameId,golds=golds)
-    return render_template('product_list.html', products=[], gameId=global_vars.gameId,golds=golds)
+        goods_list = _read_goodslist()
+        return render_template('product_list.html', products=products_list, gameId=global_vars.gameId,golds=golds, goods_list=goods_list)
+    goods_list = _read_goodslist()
+    return render_template('product_list.html', products=[], gameId=global_vars.gameId,golds=golds, goods_list=goods_list)
 
 #添加到心愿单
 @app.route('/add_to_wishlist', methods=['POST'])
@@ -102,6 +112,16 @@ def clear_wishlist():
     tools.clear_goodslist()
     log_message("备选清单已经清空")
     return jsonify({"message": "备选清单已经清空"}), 200
+
+
+@app.route('/delete_wishlist_item', methods=['POST'])
+def delete_wishlist_item():
+    commodityCode = request.form.get('commodityCode')
+    if not commodityCode:
+        return jsonify({"message": "缺少商品编号"}), 400
+    tools.delete_wishlist_item(commodityCode)
+    log_message(f"已从备选清单删除商品: {commodityCode}")
+    return jsonify({"message": "已删除备选商品"})
 
 #####################
 #获取个人信息

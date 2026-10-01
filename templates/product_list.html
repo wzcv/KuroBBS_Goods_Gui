@@ -15,6 +15,18 @@
     <button type="button" class="btn btn-danger" id="clear-wishlist">删除备选清单</button>
 </form>
 
+<h3 class="mt-4">备选清单</h3>
+<ul class="list-group" id="wishlist">
+    {% for goods in goods_list %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        <span>{{ goods.commodityName }} | {{ goods.saleTime }}</span>
+        <button type="button" class="btn btn-outline-danger btn-sm delete-wishlist-item" data-code="{{ goods.commodityCode }}">删除</button>
+    </li>
+    {% else %}
+    <li class="list-group-item text-muted">暂无备选商品</li>
+    {% endfor %}
+</ul>
+
 <h3 class="golds">目前拥有米游币数：{{ golds }}</h3>
 {% if products %}
     <h3 class="mt-4">商品信息(兑换虚拟物品请在库街区内兑换 暂时不支持)</h3>
@@ -98,9 +110,26 @@ $('#clear-wishlist').on('click', function() {
         url: '{{ url_for("clear_wishlist") }}',
         success: function(response) {
             alert('备选清单已清空');
+            location.reload();
         },
         error: function() {
             alert('清空备选清单失败');
+        }
+    });
+});
+
+$(document).on('click', '.delete-wishlist-item', function() {
+    const commodityCode = $(this).data('code');
+    $.ajax({
+        type: 'POST',
+        url: '{{ url_for("delete_wishlist_item") }}',
+        data: { commodityCode: commodityCode },
+        success: function(response) {
+            alert(response.message || '已删除');
+            location.reload();
+        },
+        error: function() {
+            alert('删除备选商品失败');
         }
     });
 });

@@ -157,7 +157,7 @@ async def _geeSlideAnalyseAsync(client: httpx.AsyncClient, bgPath: str, slicePat
     target = await loop.run_in_executor(None, _match)
     distance = target[0]
     sliceTime = trackUtils.GetSlideTrackTime(distance=distance)
-    return {"distance": distance, "time": sliceTime}
+    return {"distance": distance, "time": sliceTime, "target": target}
 
 
 async def geeSecCodeAsync(callBackSign: str, captcha_id: str, client: httpx.AsyncClient = None):
@@ -183,7 +183,8 @@ async def geeSecCodeAsync(callBackSign: str, captcha_id: str, client: httpx.Asyn
                 geeLoadData['pow_detail']['datetime'], captcha_id,
             )
 
-        w = await loop.run_in_executor(None, _calc_w)
+        w_task = loop.run_in_executor(None, _calc_w)
+        w = await w_task
 
         params = {
             "callback": callBackSign,

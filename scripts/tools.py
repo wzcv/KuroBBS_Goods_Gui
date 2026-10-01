@@ -64,12 +64,25 @@ def add_to_wishlist(commodityCode, saleTime, commodityName, gameId):
 
 
 def clear_goodslist():
-    with open(goodslist_path, 'w') as file:
-        file.write('')
+    with open(goodslist_path, 'w', encoding='utf-8') as file:
+        json.dump([], file, ensure_ascii=False, indent=4)
+
+
+def delete_wishlist_item(commodityCode):
+    """从备选清单中删除指定商品，返回删除后的列表。"""
+    try:
+        with open(goodslist_path, 'r', encoding='utf-8') as file:
+            goods_list = json.load(file)
+    except Exception:
+        goods_list = []
+    goods_list = [item for item in goods_list if str(item.get('commodityCode')) != str(commodityCode)]
+    with open(goodslist_path, 'w', encoding='utf-8') as file:
+        json.dump(goods_list, file, ensure_ascii=False, indent=4)
+    return goods_list
 
 def clear_tasklist():
-    with open(tasklistpath, 'w') as file:
-        file.write('')
+    with open(tasklistpath, 'w', encoding='utf-8') as file:
+        json.dump([], file, ensure_ascii=False, indent=4)
 
 
 def delete_task(name):
